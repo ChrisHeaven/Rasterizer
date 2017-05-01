@@ -13,8 +13,8 @@ using glm::vec2;
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
 
-const int SCREEN_WIDTH = 500;
-const int SCREEN_HEIGHT = 500;
+const int SCREEN_WIDTH = 400;
+const int SCREEN_HEIGHT = 400;
 SDL_Surface* screen;
 int t;
 float f = SCREEN_HEIGHT;
@@ -30,8 +30,10 @@ void Update();
 void Draw();
 void Interpolate( vec3 a, vec3 b, vector<vec3>& result );
 void VertexShader(const vec3& v, glm::ivec2& p);
-void DrawPolygonEdges( const vector<vec3>& vertices );
-void DrawLineSDL( SDL_Surface* surface, ivec2 a, ivec2 b, vec3 color );
+void DrawPolygon( const vector<vec3>& vertices , vec3 color);
+void DrawLineSDL( SDL_Surface* surface, ivec2 a, ivec2 b);
+void ComputePolygonRows( const vector<ivec2>& vertexPixels, vector<ivec2>& leftPixels, vector<ivec2>& rightPixels, vec3 color);
+void DrawPolygonRows(vector<ivec2>& leftPixels, vector<ivec2>& rightPixels, vec3 color);
 
 int main( int argc, char* argv[] )
 {
@@ -63,15 +65,17 @@ void Draw()
     if ( SDL_MUSTLOCK(screen) )
         SDL_LockSurface(screen);
     LoadTestModel(triangles);
-    for (size_t i = 0; i < triangles.size(); ++i)
+    vec3 currentColor;
+    for (size_t i = 0; i < triangles.size(); i++)
     {
         vector<vec3> vertices(3);
         vertices[0] = triangles[i].v0;
         vertices[1] = triangles[i].v1;
         vertices[2] = triangles[i].v2;
+        currentColor = triangles[i].color;
         for (int v = 0; v < 3; ++v)
         {
-            DrawPolygonEdges( vertices );
+            DrawPolygon( vertices , currentColor);
         }
     }
     if ( SDL_MUSTLOCK(screen) )
@@ -92,57 +96,96 @@ void Interpolate( ivec2 a, ivec2 b, vector<ivec2>& result )
     int N = result.size();
     vec2 step = vec2(b - a) / float(max(N - 1, 1));
     vec2 current( a );
-    for ( int i = 0; i < N; ++i )
+    for ( int i = 0; i < N; i++ )
     {
         result[i] = current;
         current += step;
     }
 }
 
-void DrawLineSDL( SDL_Surface* surface, ivec2 a, ivec2 b, vec3 color )
+void DrawLineSDL( SDL_Surface* surface, ivec2 a, ivec2 b, vec3 color)
 {
     ivec2 delta = glm::abs( a - b );
     int pixels = glm::max( delta.x, delta.y ) + 1;
-
     vector<ivec2> line( pixels );
+    // line = vector<ivec2> ( pixels );
     Interpolate( a, b, line );
     for (int i = 0; i < pixels; i++)
         PutPixelSDL( surface, line[i].x, line[i].y, color );
 }
 
-void DrawPolygonEdges( const vector<vec3>& vertices )
+void DrawPolygon( const vector<vec3>& vertices , vec3 color)
 {
     int V = vertices.size();
     // Transform each vertex from 3D world position to 2D image position:
-    vector<ivec2> projectedVertices( V );
-    for ( int i = 0; i < V; ++i )
+    vector<ivec2> vertexPixels( V );
+    for ( int i = 0; i < V; i++ )
     {
-        VertexShader( vertices[i], projectedVertices[i] );
+        VertexShader( vertices[i], vertexPixels[i] );
     }
-    // Loop over all vertices and draw the edge from it to the next vertex:
-    for ( int i = 0; i < V; ++i )
+
+    vector<ivec2> leftPixels;
+    vector<ivec2> rightPixels;
+
+    ComputePolygonRows( vertexPixels, leftPixels, rightPixels, color);
+    DrawPolygonRows( leftPixels, rightPixels, color);
+}
+
+void ComputePolygonRows( const vector<ivec2>& vertexPixels, vector<ivec2>& leftPixels, vector<ivec2>& rightPixels, vec3 color )
+{
+    int min = numeric_limits<int>::max();
+    int max = 0;
+    vector<ivec2> edge;
+
+    for (size_t i = 0; i < vertexPixels.size(); i++)
     {
-        int j = (i + 1) % V; // The next vertex
-        vec3 color( 1, 1, 1 );
-        DrawLineSDL( screen, projectedVertices[i], projectedVertices[j], color );
+        if (min > vertexPixels[i].y)
+            min = vertexPixels[i].y;
+        if (max < vertexPixels[i].y)
+            max = vertexPixels[i].y;
+    }
+    int ROWS = max - min + 1;
+
+    leftPixels = vector<ivec2>(ROWS);
+    rightPixels = vector<ivec2>(ROWS);
+
+    for (int i = 0; i < ROWS; i++)
+    {
+        leftPixels[i].x = +numeric_limits<int>::max();
+        rightPixels[i].x = -numeric_limits<int>::max();
+        leftPixels[i].y = min + i;
+        rightPixels[i].y = min + i;
+    }
+
+    for ( size_t i = 0; i < vertexPixels.size(); i++ )
+    {
+        int j = (i + 1) % vertexPixels.size(); // The next vertex
+        // DrawLineSDL( screen, vertexPixels[i], vertexPixels[j], color, edge);
+        ivec2 delta = glm::abs(vertexPixels[i] - vertexPixels[j] );
+        int pixels = glm::max( delta.x, delta.y ) + 1;
+        edge = vector<ivec2> ( pixels );
+        Interpolate(vertexPixels[i], vertexPixels[j], edge );
+
+        for (int a = 0; a < ROWS; a++)
+        {
+            for (size_t b = 0; b < edge.size(); b++)
+            {
+                if (edge[b].y == min + a)
+                {
+                    if (edge[b].x < leftPixels[a].x)
+                        leftPixels[a].x = edge[b].x;
+                    if (edge[b].x > rightPixels[a].x)
+                        rightPixels[a].x = edge[b].x;
+                }
+            }
+        }
     }
 }
 
-// void ComputePolygonRows( const vector<ivec2>& vertexPixels, vector<ivec2>& leftPixels, vector<ivec2>& rightPixels )
-// {
-//     int min = numeric_limits<int>::max();
-//     int max = 0;
-//     for (int i = 0; i < vertexPixels.size(); i++)
-//     {
-//         if (min > vertexPixels[i].y)
-//             min = vertexPixels[i].y;
-//         if (max < vertexPixels[i].y)
-//             max = vertexPixels[i].y;
-//     }
-//     int ROWS = max - min + 1;
-
-//     leftPixels = vector<ivec2>(ROWS);
-//     rightPixels = vector<ivec2>(ROWS);
-//     leftPixels[i].x = +numeric_limits<int>::max();
-//     rightPixels[i].x = -numeric_limits<int>::max();
-// }
+void DrawPolygonRows(vector<ivec2>& leftPixels, vector<ivec2>& rightPixels, vec3 color)
+{
+    for (size_t i = 0; i < leftPixels.size(); i++)
+    {
+        DrawLineSDL( screen, leftPixels[i], rightPixels[i], color);
+    }
+}
