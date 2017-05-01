@@ -20,6 +20,8 @@ int t;
 float f = SCREEN_HEIGHT;
 std::vector<Triangle> triangles;
 vec3 cameraPos( 0, 0, -3.001 );
+mat3 R;
+float yaw = 0; // Yaw angle controlling camera rotation around y-axis
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
@@ -125,3 +127,22 @@ void DrawPolygonEdges( const vector<vec3>& vertices )
         DrawLineSDL( screen, projectedVertices[i], projectedVertices[j], color );
     }
 }
+
+// void ComputePolygonRows( const vector<ivec2>& vertexPixels, vector<ivec2>& leftPixels, vector<ivec2>& rightPixels )
+// {
+//     int min = numeric_limits<int>::max();
+//     int max = 0;
+//     for (int i = 0; i < vertexPixels.size(); i++)
+//     {
+//         if (min > vertexPixels[i].y)
+//             min = vertexPixels[i].y;
+//         if (max < vertexPixels[i].y)
+//             max = vertexPixels[i].y;
+//     }
+//     int ROWS = max - min + 1;
+
+//     leftPixels = vector<ivec2>(ROWS);
+//     rightPixels = vector<ivec2>(ROWS);
+//     leftPixels[i].x = +numeric_limits<int>::max();
+//     rightPixels[i].x = -numeric_limits<int>::max();
+// }
