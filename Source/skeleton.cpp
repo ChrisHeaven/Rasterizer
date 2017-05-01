@@ -69,10 +69,6 @@ void Draw()
         vertices[2] = triangles[i].v2;
         for (int v = 0; v < 3; ++v)
         {
-            // ivec2 projPos;
-            // VertexShader(vertices[v], projPos);
-            // vec3 color(1, 1, 1);
-            // PutPixelSDL(screen, projPos.x, projPos.y, color);
             DrawPolygonEdges( vertices );
         }
     }
