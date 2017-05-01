@@ -13,8 +13,8 @@ using glm::vec2;
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
 
-const int SCREEN_WIDTH = 400;
-const int SCREEN_HEIGHT = 400;
+const int SCREEN_WIDTH = 800;
+const int SCREEN_HEIGHT = 800;
 SDL_Surface* screen;
 int t;
 float f = SCREEN_HEIGHT;
@@ -22,6 +22,8 @@ std::vector<Triangle> triangles;
 vec3 cameraPos( 0, 0, -3.001 );
 mat3 R;
 float yaw = 0; // Yaw angle controlling camera rotation around y-axis
+static vec3 anti_aliasing[SCREEN_WIDTH / 2][SCREEN_HEIGHT / 2];
+static vec3 original_img[SCREEN_WIDTH][SCREEN_HEIGHT];
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
@@ -37,7 +39,7 @@ void DrawPolygonRows(vector<ivec2>& leftPixels, vector<ivec2>& rightPixels, vec3
 
 int main( int argc, char* argv[] )
 {
-    screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT );
+    screen = InitializeSDL( SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 );
     t = SDL_GetTicks(); // Set start value for timer.
 
     while ( NoQuitMessageSDL() )
@@ -111,7 +113,10 @@ void DrawLineSDL( SDL_Surface* surface, ivec2 a, ivec2 b, vec3 color)
     // line = vector<ivec2> ( pixels );
     Interpolate( a, b, line );
     for (int i = 0; i < pixels; i++)
-        PutPixelSDL( surface, line[i].x, line[i].y, color );
+    {
+        // PutPixelSDL( surface, line[i].x, line[i].y, color );
+        original_img[line[i].x][line[i].y] = color;
+    }
 }
 
 void DrawPolygon( const vector<vec3>& vertices , vec3 color)
@@ -129,6 +134,19 @@ void DrawPolygon( const vector<vec3>& vertices , vec3 color)
 
     ComputePolygonRows( vertexPixels, leftPixels, rightPixels, color);
     DrawPolygonRows( leftPixels, rightPixels, color);
+
+    int height = 0;
+    for (int i = 0; i < SCREEN_HEIGHT; i = i + 2)
+    {
+        int width = 0;
+        for (int j = 0; j < SCREEN_WIDTH; j = j + 2)
+        {
+            anti_aliasing[width][height] = (original_img[j][i] + original_img[j + 1][i] + original_img[j][i + 1] + original_img[j + 1][i + 1]) / vec3(4.0f, 4.0f, 4.0f);
+            PutPixelSDL(screen, width, height, anti_aliasing[width][height]);
+            width++;
+        }
+        height++;
+    }
 }
 
 void ComputePolygonRows( const vector<ivec2>& vertexPixels, vector<ivec2>& leftPixels, vector<ivec2>& rightPixels, vec3 color )
