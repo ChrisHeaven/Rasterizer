@@ -12,19 +12,19 @@ using glm::vec2;
 
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 800;
+const int SCREEN_WIDTH = 400;
+const int SCREEN_HEIGHT = 400;
 SDL_Surface* screen;
 int t;
 float f = SCREEN_HEIGHT;
 std::vector<Triangle> triangles;
-vec3 cameraPos(0, 0, -3.001);
+vec3 camera_pos(0, 0, -3.001);
+float yaw = 0.0f * 3.1415926 / 180; // Yaw angle controlling camera rotation around y-axis
 mat3 R;
-float yaw = 0; // Yaw angle controlling camera rotation around y-axis
 static vec3 anti_aliasing[SCREEN_WIDTH / 2][SCREEN_HEIGHT / 2];
 static vec3 original_img[SCREEN_WIDTH][SCREEN_HEIGHT];
 float depthBuffer[SCREEN_HEIGHT][SCREEN_WIDTH];
-vec3 lightPos(0, -0.5, -0.7);
+vec3 light_pos(0, -0.5, -0.7);
 vec3 lightPower = 14.f * vec3( 1, 1, 1 );
 vec3 indirectLightPowerPerArea = 0.5f * vec3( 1, 1, 1 );
 
@@ -38,6 +38,14 @@ struct Pixel
     int triangle_index;
 };
 
+struct Intersection
+{
+    vec3 position;
+    float distance;
+    int triangle_index;
+    vec3 colour;
+};
+
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
 void Update();
@@ -48,6 +56,7 @@ void DrawPolygon(const vector<vec3>& vertices, vec3 color, int triangle_index);
 void DrawLineSDL(SDL_Surface* surface, Pixel a, Pixel b);
 void ComputePolygonRows(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, vec3 color);
 void DrawPolygonRows(vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, vec3 color);
+bool closest_intersection(vec3 start, vec3 dir, const vector<Triangle>& triangles, Intersection& cloestIntersection);
 
 int main(int argc, char* argv[])
 {
@@ -71,6 +80,58 @@ void Update()
     float dt = float(t2 - t);
     t = t2;
     cout << "Render time: " << dt << " ms." << endl;
+
+    Uint8* keystate = SDL_GetKeyState(0);
+    if (keystate[SDLK_UP])
+    {
+        // Move camera forward
+        camera_pos.z += 0.1f;
+    }
+    if (keystate[SDLK_DOWN])
+    {
+        // Move camera backward
+        camera_pos.z -= 0.1f;
+    }
+    if (keystate[SDLK_LEFT])
+    {
+        // Rotate the camera along the y axis
+        yaw += 0.1f;
+    }
+    if (keystate[SDLK_RIGHT])
+    {
+        // Rotate the camera along the y axis
+        yaw -= 0.1f;
+    }
+    if (keystate[SDLK_w])
+    {
+        // Move lightsource forward
+        light_pos.z += 0.1f;
+    }
+    if (keystate[SDLK_s])
+    {
+        // Move lightsource backward
+        light_pos.z -= 0.1f;
+    }
+    if (keystate[SDLK_a])
+    {
+        // Move lightsource left
+        light_pos.x -= 0.1f;
+    }
+    if (keystate[SDLK_d])
+    {
+        // Move lightsource right
+        light_pos.x += 0.1f;
+    }
+    if (keystate[SDLK_q])
+    {
+        // Move lightsource up
+        light_pos.y -= 0.1f;
+    }
+    if (keystate[SDLK_e])
+    {
+        // Move lightsource down
+        light_pos.y += 0.1f;
+    }
 }
 
 void Draw()
@@ -80,7 +141,7 @@ void Draw()
         SDL_LockSurface(screen);
     LoadTestModel(triangles);
     vec3 currentColor;
-
+    R = mat3(cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw));
     for ( int y = 0; y < SCREEN_HEIGHT; y++ )
     {
         for ( int x = 0; x < SCREEN_WIDTH; x++ )
@@ -104,26 +165,25 @@ void Draw()
 
 void VertexShader(const vec3& v, Pixel& p, int triangle_index)
 {
-    float x_ = v[0] / (v[2] - cameraPos[2]) * f + SCREEN_WIDTH / 2;
-    float y_ = v[1] / (v[2] - cameraPos[2]) * f + SCREEN_HEIGHT / 2;
-    float z_ = 1 / (v[2] - cameraPos[2]);
+    vec3 nv = (v - camera_pos) * R + camera_pos;
+
+    float x_ = (nv[0] - camera_pos[0]) / (nv[2] - camera_pos[2]) * f + SCREEN_WIDTH / 2;
+    float y_ = (nv[1] - camera_pos[1]) / (nv[2] - camera_pos[2]) * f + SCREEN_HEIGHT / 2;
+    float z_ = 1 / (nv[2] - camera_pos[2]);
     p.x = x_;
     p.y = y_;
     p.zinv = z_;
-    p.pos3d = v;
+    p.pos3d = nv;
     p.triangle_index = triangle_index;
 }
 
 void Interpolate(Pixel a, Pixel b, vector<Pixel>& result)
 {
     int N = result.size();
-    // vec2 step = vec2(b - a) / float(max(N - 1, 1));
+
     float step_x = float(b.x - a.x) / float(max(N - 1, 1));
     float step_y = float(b.y - a.y) / float(max(N - 1, 1));
     float step_zinv = float(b.zinv - a.zinv) / float(max(N - 1, 1));
-    // float step_pos3d0 = float(b.pos3d[0] * b.zinv - a.pos3d[0] * a.zinv) / float(max(N - 1, 1));
-    // float step_pos3d1 = float(b.pos3d[1] * b.zinv - a.pos3d[1] * a.zinv) / float(max(N - 1, 1));
-    // float step_pos3d2 = float(1.0f / (b.pos3d[2] - cameraPos[2]) - 1.0f / (a.pos3d[2] - cameraPos[2])) / float(max(N - 1, 1));
 
     for (int i = 0; i < N; i++)
     {
@@ -131,21 +191,13 @@ void Interpolate(Pixel a, Pixel b, vector<Pixel>& result)
         result[i].y = a.y + step_y * i;
         result[i].zinv = a.zinv + step_zinv * i;
 
-        result[i].pos3d[2] = 1 / result[i].zinv + cameraPos[2];
-        result[i].pos3d[1] = (result[i].y - SCREEN_HEIGHT / 2) / f * (result[i].pos3d[2] - cameraPos[2]);
-        result[i].pos3d[0] = (result[i].x - SCREEN_WIDTH / 2) / f * (result[i].pos3d[2] - cameraPos[2]);
-        // result[i].pos3d = vec3(a.pos3d[0] + step_pos3d0 * i, a.pos3d[1] + step_pos3d1 * i, a.pos3d[2] + step_pos3d2 * i);
+        result[i].pos3d[2] = 1 / result[i].zinv + camera_pos[2];
+        result[i].pos3d[1] = (result[i].y - SCREEN_HEIGHT / 2) / f * (result[i].pos3d[2] - camera_pos[2]) + camera_pos[1];
+        result[i].pos3d[0] = (result[i].x - SCREEN_WIDTH / 2) / f * (result[i].pos3d[2] - camera_pos[2]) + camera_pos[0];
         result[i].triangle_index = a.triangle_index;
         // result[i] = current;
         // current += step;
     }
-
-    // for (int j = 0; j < N; j++)
-    // {
-    //     result[j].pos3d[0] = result[j].pos3d[0] / a.zinv;
-    //     result[j].pos3d[1] = result[j].pos3d[1] / a.zinv;
-    //     result[j].pos3d[2] = 1.0f / result[j].pos3d[2];
-    // }
 }
 
 void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
@@ -155,6 +207,7 @@ void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
     int pixels = glm::max(delta_x, delta_y) + 1;
     vector<Pixel> line(pixels);
     vec3 light_area;
+    Intersection inter, shadow_inter;
     // line = vector<Pixel> (pixels);
     Interpolate(a, b, line);
     for (int i = 0; i < pixels; i++)
@@ -163,7 +216,7 @@ void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
         if ( line[i].zinv > depthBuffer[line[i].x][line[i].y] )
         {
             depthBuffer[line[i].x][line[i].y] = line[i].zinv;
-            vec3 dis = lightPos - line[i].pos3d;
+            vec3 dis = light_pos - line[i].pos3d;
             float r = glm::length(dis);
             float result = dis[0] * triangles[line[i].triangle_index].normal[0] + dis[1] * triangles[line[i].triangle_index].normal[1] + dis[2] * triangles[line[i].triangle_index].normal[2];
             float camera_pos = 4.0 * 3.1415926 * r * r;
@@ -171,6 +224,13 @@ void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
                 light_area = result / camera_pos * lightPower;
             else
                 light_area = vec3(0.0, 0.0, 0.0);
+
+            if (closest_intersection(line[i].pos3d, dis, triangles, inter))
+            {
+                vec3 dis_ = inter.position - line[i].pos3d;
+                if (r > glm::length(dis_) && result > 0.0 && line[i].triangle_index != inter.triangle_index)
+                    light_area = vec3(0.0, 0.0, 0.0);
+            }
 
             light_area = 0.5f * (indirectLightPowerPerArea + light_area);
             original_img[line[i].x][line[i].y] = color * light_area;
@@ -272,4 +332,67 @@ void DrawPolygonRows(vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, vec3
 {
     for (size_t i = 0; i < leftPixels.size(); i++)
         DrawLineSDL(screen, leftPixels[i], rightPixels[i], color);
+}
+
+bool closest_intersection(vec3 start, vec3 dir, const vector<Triangle>& triangles, Intersection& cloestIntersection)
+{
+    // printf("aaa\n");
+    bool flag = false;
+    float min = 0.0;
+    int triangle_index, ignore = 1;
+    vec3 v0, v1, v2, e1, e2, b, x, intersection_pos, e1_, e2_, b_;
+    vec3 reflect_position, reflect_dir;
+    mat3 A;
+    vec3 front_triangle_v0, front_triangle_v1, front_triangle_v2;
+    front_triangle_v0 = vec3(-0.76f, -0.87f, -1.0f);
+    front_triangle_v1 = vec3(-0.76f, 1.0f, -1.0f);
+    front_triangle_v2 = vec3(1.31f, 1.0f, -1.0f);
+    Intersection reflect_intersec;
+
+    e1_ = front_triangle_v1 - front_triangle_v0;
+    e2_ = front_triangle_v2 - front_triangle_v0;
+    b_ = start - front_triangle_v0;
+    A = mat3(-dir, e1_, e2_);
+    x = glm::inverse(A) * b_;
+    if (x[1] >= 0 && x[2] >= 0 && (x[1] + x[2]) <= 1 && x[0] > 0)
+        ignore = 0;
+
+    for (size_t i = 0; i < triangles.size(); i++)
+    {
+        v0 = triangles[i].v0;
+        v1 = triangles[i].v1;
+        v2 = triangles[i].v2;
+
+        e1 = v1 - v0;
+        e2 = v2 - v0;
+        b = start - v0;
+
+        A = mat3(-dir, e1, e2);
+        x = glm::inverse(A) * b;
+        if (x[1] >= 0 && x[2] >= 0 && (x[1] + x[2]) <= 1 && x[0] > 0.03f)
+        {
+            if (!flag)
+            {
+                min = x[0];
+                triangle_index = i;
+            }
+            flag = true;
+            if (min > x[0])
+            {
+                min = x[0];
+                triangle_index = i;
+            }
+        }
+    }
+
+    if (flag)
+    {
+        cloestIntersection.position = start + min * dir;
+        cloestIntersection.distance = min;
+        cloestIntersection.triangle_index = triangle_index;
+        cloestIntersection.colour = triangles[triangle_index].color;
+        return true;
+    }
+    else
+        return false;
 }
