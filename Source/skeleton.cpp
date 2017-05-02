@@ -12,8 +12,8 @@ using glm::vec2;
 
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
-const int SCREEN_WIDTH = 400;
-const int SCREEN_HEIGHT = 400;
+const int SCREEN_WIDTH = 800;
+const int SCREEN_HEIGHT = 800;
 SDL_Surface* screen;
 int t;
 float f = SCREEN_HEIGHT;
@@ -339,23 +339,10 @@ bool closest_intersection(vec3 start, vec3 dir, const vector<Triangle>& triangle
     // printf("aaa\n");
     bool flag = false;
     float min = 0.0;
-    int triangle_index, ignore = 1;
-    vec3 v0, v1, v2, e1, e2, b, x, intersection_pos, e1_, e2_, b_;
+    int triangle_index;
+    vec3 v0, v1, v2, e1, e2, b, x;
     vec3 reflect_position, reflect_dir;
     mat3 A;
-    vec3 front_triangle_v0, front_triangle_v1, front_triangle_v2;
-    front_triangle_v0 = vec3(-0.76f, -0.87f, -1.0f);
-    front_triangle_v1 = vec3(-0.76f, 1.0f, -1.0f);
-    front_triangle_v2 = vec3(1.31f, 1.0f, -1.0f);
-    Intersection reflect_intersec;
-
-    e1_ = front_triangle_v1 - front_triangle_v0;
-    e2_ = front_triangle_v2 - front_triangle_v0;
-    b_ = start - front_triangle_v0;
-    A = mat3(-dir, e1_, e2_);
-    x = glm::inverse(A) * b_;
-    if (x[1] >= 0 && x[2] >= 0 && (x[1] + x[2]) <= 1 && x[0] > 0)
-        ignore = 0;
 
     for (size_t i = 0; i < triangles.size(); i++)
     {
