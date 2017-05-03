@@ -12,21 +12,31 @@ using glm::vec2;
 
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 800;
+const int SCREEN_WIDTH = 300;
+const int SCREEN_HEIGHT = 300;
 SDL_Surface* screen;
 int t;
 float f = SCREEN_HEIGHT;
 std::vector<Triangle> triangles;
-vec3 camera_pos(0, 0, -3.001);
+
+vec3 camera_pos(0, 0, -3.5001);
+static const float cZ = camera_pos[2];
+
 float yaw = 0.0f * 3.1415926 / 180; // Yaw angle controlling camera rotation around y-axis
-mat3 R;
+// mat3 R;
+mat3 R = mat3(cos(yaw), 0, sin(yaw),
+              0, 1, 0,
+              -sin(yaw), 0, cos(yaw));
+vec3 Right( R[0][0], R[0][1], R[0][2] );
+vec3 down( R[1][0], R[1][1], R[1][2] );
+vec3 forward( R[2][0], R[2][1], R[2][2] );
 static vec3 anti_aliasing[SCREEN_WIDTH / 2][SCREEN_HEIGHT / 2];
 static vec3 original_img[SCREEN_WIDTH][SCREEN_HEIGHT];
 float depthBuffer[SCREEN_HEIGHT][SCREEN_WIDTH];
+vec3 light_pos_O(0, -0.5, -0.7);
 vec3 light_pos(0, -0.5, -0.7);
 vec3 lightPower = 14.f * vec3(1, 1, 1);
-vec3 indirectLightPowerPerArea = 0.5f * vec3(1, 1, 1);
+static const vec3 indirectLightPowerPerArea = 0.5f * vec3(1, 1, 1);
 
 struct Pixel
 {
@@ -36,6 +46,7 @@ struct Pixel
     // vec3 illumination;
     vec3 pos3d;
     int triangle_index;
+
 };
 
 struct Intersection
@@ -66,10 +77,12 @@ int main(int argc, char* argv[])
 
     while (NoQuitMessageSDL())
     {
+        memset(anti_aliasing, 0, sizeof(anti_aliasing));
+        memset(original_img, 0, sizeof(original_img));
+
         Update();
         Draw();
     }
-
     SDL_SaveBMP(screen, "screenshot.bmp");
     return 0;
 }
@@ -81,8 +94,10 @@ void Update()
     float dt = float(t2 - t);
     t = t2;
     cout << "Render time: " << dt << " ms." << endl;
+    Uint8* keystate = NULL;
 
-    Uint8* keystate = SDL_GetKeyState(0);
+    while (keystate == NULL)keystate = SDL_GetKeyState(0);
+
     if (keystate[SDLK_UP])
     {
         // Move camera forward
@@ -97,11 +112,30 @@ void Update()
     {
         // Rotate the camera along the y axis
         yaw += 0.1f;
+
+        camera_pos = camera_pos - Right;
+        // float z = abs(sqrt(cZ * cZ - yaw * yaw));
+        // printf("yaw is %f, z is %f", yaw, z);
+        // camera_pos[0] = yaw;
+        // camera_pos[2] = z;
+        // R = mat3(cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw));
+        // light_pos = (light_pos_O - camera_pos) * R + camera_pos;
     }
     if (keystate[SDLK_RIGHT])
     {
         // Rotate the camera along the y axis
         yaw -= 0.1f;
+        // vec4 ii = (camera_pos[0],camera_pos[1],camera_pos[2],1);
+        // vec4 iii = ii * R;
+        // camera_pos[0] =  iii[0];
+        // camera_pos[1] =  iii[1];
+        // camera_pos[] =  iii[1];
+        camera_pos = camera_pos + Right;
+
+        // float z = abs(sqrt(cZ * cZ - yaw * yaw));
+        // printf("yaw is %f, z is %f\n", yaw, z);
+        // camera_pos[0] = yaw;
+        // camera_pos[2] = z;
     }
     if (keystate[SDLK_w])
     {
@@ -142,15 +176,16 @@ void Draw()
         SDL_LockSurface(screen);
     LoadTestModel(triangles);
 
-    R = mat3(cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw));
-    for (int y = 0; y < SCREEN_HEIGHT; y++)
-    {
-        for (int x = 0; x < SCREEN_WIDTH; x++)
-            depthBuffer[y][x] = 0;
-    }
-
+    // R = mat3(cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw));
+    // for (int y = 0; y < SCREEN_HEIGHT; y++)
+    // {
+    //     for (int x = 0; x < SCREEN_WIDTH; x++)
+    //         depthBuffer[y][x] = 0;
+    // }
+    memset(depthBuffer, 0, sizeof(depthBuffer));
     pthread_t tid[8];
     int thread_id[8];
+    vec3 currentColor;
 
     for (int i = 0; i < 8; i++)
     {
@@ -160,6 +195,17 @@ void Draw()
 
     for (int i = 0; i < 8; i++)
         pthread_join(tid[i], NULL);
+
+    // for (size_t i = 0; i < triangles.size(); i++) {
+    //     vector<vec3> vertices(3);
+    //     vertices[0] = triangles[i].v0;
+    //     vertices[1] = triangles[i].v1;
+    //     vertices[2] = triangles[i].v2;
+    //     currentColor = triangles[i].color;
+    //     for (int v = 0; v < 3; v++)
+    //         DrawPolygon(vertices , currentColor, i);
+    // }
+
 
     if (SDL_MUSTLOCK(screen))
         SDL_UnlockSurface(screen);
@@ -229,15 +275,19 @@ void *triangles_thread(void *arg)
 
 void VertexShader(const vec3& v, Pixel& p, int triangle_index)
 {
-    vec3 nv = (v - camera_pos) * R + camera_pos;
+    //vec3 nv = (v - camera_pos) * R + camera_pos;
+    // camera_pos = (camera_pos - v) * R + v;
 
-    float x_ = (nv[0] - camera_pos[0]) / (nv[2] - camera_pos[2]) * f + SCREEN_WIDTH / 2;
-    float y_ = (nv[1] - camera_pos[1]) / (nv[2] - camera_pos[2]) * f + SCREEN_HEIGHT / 2;
-    float z_ = 1 / (nv[2] - camera_pos[2]);
+    float x_ = (v[0] - camera_pos[0]) / (v[2] - camera_pos[2]) * f + SCREEN_WIDTH / 2;
+    float y_ = (v[1] - camera_pos[1]) / (v[2] - camera_pos[2]) * f + SCREEN_HEIGHT / 2;
+    float z_ = 1 / (v[2] - camera_pos[2]);
+    // printf("x %f\n", x_);
+    // printf("y %f\n", y_);
+
     p.x = x_;
     p.y = y_;
     p.zinv = z_;
-    p.pos3d = nv;
+    p.pos3d = v;
     p.triangle_index = triangle_index;
 }
 
@@ -266,6 +316,7 @@ void Interpolate(Pixel a, Pixel b, vector<Pixel>& result)
 
 void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
 {
+
     int delta_x = glm::abs(a.x - b.x);
     int delta_y = glm::abs(a.y - b.y);
     int pixels = glm::max(delta_x, delta_y) + 1;
@@ -274,26 +325,53 @@ void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
     Intersection inter, shadow_inter;
     // line = vector<Pixel> (pixels);
     Interpolate(a, b, line);
+    //printf("y: %d, x: %d\n", line[0].y, line[0].x);
+    // printf("x%d\n", line[0].x);
+
+
     for (int i = 0; i < pixels; i++)
     {
         // PutPixelSDL(surface, line[i].x, line[i].y, color);
-
-        if (line[i].zinv > depthBuffer[line[i].x][line[i].y])
+        if (line[i].x >= 0 && line[i].x < SCREEN_WIDTH && line[i].y >= 0 && line[i].y < SCREEN_HEIGHT)
         {
-            depthBuffer[line[i].x][line[i].y] = line[i].zinv;
-            vec3 dis = light_pos - line[i].pos3d;
-            float r = glm::length(dis);
-            float result = dis[0] * triangles[line[i].triangle_index].normal[0] + dis[1] * triangles[line[i].triangle_index].normal[1] + dis[2] * triangles[line[i].triangle_index].normal[2];
-            float camera_pos = 4.0 * 3.1415926 * r * r;
-            if (result > 0.0)
-                light_area = result / camera_pos * lightPower;
-            else
-                light_area = vec3(0.0, 0.0, 0.0);
-
-            if (light_pos[1] < -0.20f)
+            if (line[i].zinv > depthBuffer[line[i].x][line[i].y])
             {
-                if (line[i].pos3d[1] >= -0.20f)
+                depthBuffer[line[i].x][line[i].y] = line[i].zinv;
+                vec3 dis = light_pos - line[i].pos3d;
+                float r = glm::length(dis);
+
+                float result = dis[0] * triangles[line[i].triangle_index].normal[0] + dis[1] * triangles[line[i].triangle_index].normal[1] + dis[2] * triangles[line[i].triangle_index].normal[2];
+                float camera_pos1 = 4.0 * 3.1415926 * r * r;
+
+                if (result > 0.0)
+                    light_area = result / camera_pos1 * lightPower;
+                else
+                    light_area = vec3(0.0, 0.0, 0.0);
+
+                if (light_pos[1] < -0.20f)
                 {
+                    if (line[i].pos3d[1] >= -0.20f)
+                    {
+                        if (closest_intersection(line[i].pos3d, dis, triangles, inter))
+                        {
+                            vec3 dis_ = inter.position - line[i].pos3d;
+                            if (r > glm::length(dis_) && result > 0.0 && line[i].triangle_index != inter.triangle_index)
+                                light_area = vec3(0.0, 0.0, 0.0);
+                        }
+
+                        light_area = 0.5f * (indirectLightPowerPerArea + light_area);
+                        original_img[line[i].x][line[i].y] = color * light_area;
+                    }
+                    else
+                    {
+
+                        light_area = 0.5f * (indirectLightPowerPerArea + light_area);
+                        original_img[line[i].x][line[i].y] = color * light_area;
+                    }
+                }
+                else
+                {
+
                     if (closest_intersection(line[i].pos3d, dis, triangles, inter))
                     {
                         vec3 dis_ = inter.position - line[i].pos3d;
@@ -304,25 +382,7 @@ void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
                     light_area = 0.5f * (indirectLightPowerPerArea + light_area);
                     original_img[line[i].x][line[i].y] = color * light_area;
                 }
-                else
-                {
-                    light_area = 0.5f * (indirectLightPowerPerArea + light_area);
-                    original_img[line[i].x][line[i].y] = color * light_area;
-                }
             }
-            else
-            {
-                if (closest_intersection(line[i].pos3d, dis, triangles, inter))
-                {
-                    vec3 dis_ = inter.position - line[i].pos3d;
-                    if (r > glm::length(dis_) && result > 0.0 && line[i].triangle_index != inter.triangle_index)
-                        light_area = vec3(0.0, 0.0, 0.0);
-                }
-
-                light_area = 0.5f * (indirectLightPowerPerArea + light_area);
-                original_img[line[i].x][line[i].y] = color * light_area;
-            }
-
         }
     }
 }
@@ -368,52 +428,16 @@ void DrawPolygon(const vector<vec3>& vertices, vec3 color, int triangle_index)
                     acu_ = acu_ + acu;
                 }
 
-
-                // depth = (((1.0f / depthBuffer[j][i]) - 2.5) * 4.0f);
-                // depth = depth - depth / 2 + depth / 2 * (rand() / float(RAND_MAX));
-                // vec3 second = (original_img[j][i] +
-                //                original_img[j + depth][i] +
-                //                original_img[j][i + depth] +
-                //                original_img[j + depth][i + depth] +
-                //                original_img[j - depth][i] +
-                //                original_img[j][i - depth] +
-                //                original_img[j - depth][i - depth] +
-                //                original_img[j + depth][i - depth] +
-                //                original_img[j - depth][i + depth]) / vec3(9.0f, 9.0f, 9.0f);
-
-                // depth = (((1.0f / depthBuffer[j][i]) - 2.5) * 4.0f);
-                // depth = depth - depth / 1 + depth / 1 * (rand() / float(RAND_MAX));
-                // vec3 third = (original_img[j][i] +
-                //               original_img[j + depth][i] +
-                //               original_img[j][i + depth] +
-                //               original_img[j + depth][i + depth] +
-                //               original_img[j - depth][i] +
-                //               original_img[j][i - depth] +
-                //               original_img[j - depth][i - depth] +
-                //               original_img[j + depth][i - depth] +
-                //               original_img[j - depth][i + depth]) / vec3(9.0f, 9.0f, 9.0f);
-
-                // depth = (((1.0f / depthBuffer[j][i]) - 2.5) * 4.0f);
-                // depth = depth - depth / 1 + depth / 1 * (rand() / float(RAND_MAX));
-                // vec3 fourth = (original_img[j][i] +
-                //                original_img[j + depth][i] +
-                //                original_img[j][i + depth] +
-                //                original_img[j + depth][i + depth] +
-                //                original_img[j - depth][i] +
-                //                original_img[j][i - depth] +
-                //                original_img[j - depth][i - depth] +
-                //                original_img[j + depth][i - depth] +
-                //                original_img[j - depth][i + depth]) / vec3(9.0f, 9.0f, 9.0f);
-
-                // anti_aliasing[width][height] = (anti_aliasing[width][height] + second + third + fourth) / 4.0f;
                 anti_aliasing[width][height] = acu_ / 4.0f;
                 PutPixelSDL(screen, width, height, anti_aliasing[width][height]);
+                anti_aliasing[width][height] = vec3(0, 0, 0);
                 width++;
             }
             else
             {
                 anti_aliasing[width][height] = (original_img[j][i] + original_img[j + 1][i] + original_img[j][i + 1] + original_img[j + 1][i + 1]) / vec3(4.0f, 4.0f, 4.0f);
                 PutPixelSDL(screen, width, height, anti_aliasing[width][height]);
+                anti_aliasing[width][height] = vec3(0, 0, 0);
                 width++;
             }
         }
@@ -485,8 +509,10 @@ void ComputePolygonRows(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPi
 
 void DrawPolygonRows(vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, vec3 color)
 {
-    for (size_t i = 0; i < leftPixels.size(); i++)
+    for (size_t i = 0; i < leftPixels.size(); i++) {
+
         DrawLineSDL(screen, leftPixels[i], rightPixels[i], color);
+    }
 }
 
 bool closest_intersection(vec3 start, vec3 dir, const vector<Triangle>& triangles, Intersection& cloestIntersection)
