@@ -12,8 +12,8 @@ using glm::vec2;
 
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 800;
+const int SCREEN_WIDTH = 500;
+const int SCREEN_HEIGHT = 500;
 SDL_Surface* screen;
 int t;
 float f = SCREEN_HEIGHT;
@@ -25,8 +25,8 @@ static vec3 anti_aliasing[SCREEN_WIDTH / 2][SCREEN_HEIGHT / 2];
 static vec3 original_img[SCREEN_WIDTH][SCREEN_HEIGHT];
 float depthBuffer[SCREEN_HEIGHT][SCREEN_WIDTH];
 vec3 light_pos(0, -0.5, -0.7);
-vec3 lightPower = 14.f * vec3( 1, 1, 1 );
-vec3 indirectLightPowerPerArea = 0.5f * vec3( 1, 1, 1 );
+vec3 lightPower = 14.f * vec3(1, 1, 1);
+vec3 indirectLightPowerPerArea = 0.5f * vec3(1, 1, 1);
 
 struct Pixel
 {
@@ -142,9 +142,9 @@ void Draw()
     LoadTestModel(triangles);
     vec3 currentColor;
     R = mat3(cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw));
-    for ( int y = 0; y < SCREEN_HEIGHT; y++ )
+    for (int y = 0; y < SCREEN_HEIGHT; y++)
     {
-        for ( int x = 0; x < SCREEN_WIDTH; x++ )
+        for (int x = 0; x < SCREEN_WIDTH; x++)
             depthBuffer[y][x] = 0;
     }
 
@@ -213,7 +213,7 @@ void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
     for (int i = 0; i < pixels; i++)
     {
         // PutPixelSDL(surface, line[i].x, line[i].y, color);
-        if ( line[i].zinv > depthBuffer[line[i].x][line[i].y] )
+        if (line[i].zinv > depthBuffer[line[i].x][line[i].y])
         {
             depthBuffer[line[i].x][line[i].y] = line[i].zinv;
             vec3 dis = light_pos - line[i].pos3d;
@@ -225,15 +225,39 @@ void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
             else
                 light_area = vec3(0.0, 0.0, 0.0);
 
-            if (closest_intersection(line[i].pos3d, dis, triangles, inter))
+            if (light_pos[1] < -0.20f)
             {
-                vec3 dis_ = inter.position - line[i].pos3d;
-                if (r > glm::length(dis_) && result > 0.0 && line[i].triangle_index != inter.triangle_index)
-                    light_area = vec3(0.0, 0.0, 0.0);
+                if (line[i].pos3d[1] >= -0.20f)
+                {
+                    if (closest_intersection(line[i].pos3d, dis, triangles, inter))
+                    {
+                        vec3 dis_ = inter.position - line[i].pos3d;
+                        if (r > glm::length(dis_) && result > 0.0 && line[i].triangle_index != inter.triangle_index)
+                            light_area = vec3(0.0, 0.0, 0.0);
+                    }
+
+                    light_area = 0.5f * (indirectLightPowerPerArea + light_area);
+                    original_img[line[i].x][line[i].y] = color * light_area;
+                }
+                else
+                {
+                    light_area = 0.5f * (indirectLightPowerPerArea + light_area);
+                    original_img[line[i].x][line[i].y] = color * light_area;
+                }
+            }
+            else
+            {
+                if (closest_intersection(line[i].pos3d, dis, triangles, inter))
+                {
+                    vec3 dis_ = inter.position - line[i].pos3d;
+                    if (r > glm::length(dis_) && result > 0.0 && line[i].triangle_index != inter.triangle_index)
+                        light_area = vec3(0.0, 0.0, 0.0);
+                }
+
+                light_area = 0.5f * (indirectLightPowerPerArea + light_area);
+                original_img[line[i].x][line[i].y] = color * light_area;
             }
 
-            light_area = 0.5f * (indirectLightPowerPerArea + light_area);
-            original_img[line[i].x][line[i].y] = color * light_area;
         }
     }
 }
