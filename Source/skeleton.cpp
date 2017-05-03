@@ -12,8 +12,8 @@ using glm::vec2;
 
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
-const int SCREEN_WIDTH = 600;
-const int SCREEN_HEIGHT = 600;
+const int SCREEN_WIDTH = 800;
+const int SCREEN_HEIGHT = 800;
 SDL_Surface* screen;
 int t;
 float f = SCREEN_HEIGHT;
@@ -277,6 +277,7 @@ void DrawLineSDL(SDL_Surface * surface, Pixel a, Pixel b, vec3 color)
     for (int i = 0; i < pixels; i++)
     {
         // PutPixelSDL(surface, line[i].x, line[i].y, color);
+
         if (line[i].zinv > depthBuffer[line[i].x][line[i].y])
         {
             depthBuffer[line[i].x][line[i].y] = line[i].zinv;
@@ -336,6 +337,7 @@ void DrawPolygon(const vector<vec3>& vertices, vec3 color, int triangle_index)
 
     vector<Pixel> leftPixels;
     vector<Pixel> rightPixels;
+    vec3 acu_;
 
     ComputePolygonRows(vertexPixels, leftPixels, rightPixels, color);
     DrawPolygonRows(leftPixels, rightPixels, color);
@@ -346,9 +348,74 @@ void DrawPolygon(const vector<vec3>& vertices, vec3 color, int triangle_index)
         int width = 0;
         for (int j = 0; j < SCREEN_WIDTH; j = j + 2)
         {
-            anti_aliasing[width][height] = (original_img[j][i] + original_img[j + 1][i] + original_img[j][i + 1] + original_img[j + 1][i + 1]) / vec3(4.0f, 4.0f, 4.0f);
-            PutPixelSDL(screen, width, height, anti_aliasing[width][height]);
-            width++;
+            acu_ = vec3(0.0f, 0.0f, 0.0f);
+            // printf("%f\n", depthBuffer[j][i]);
+            if (depthBuffer[j][i] > 0 && (1.0f / depthBuffer[j][i]) > 2.5)
+            {
+                for (int k = 0; k < 4; k++)
+                {
+                    int depth = (((1.0f / depthBuffer[j][i]) - 2.5) * 4.0f);
+                    depth = depth - depth / 2 + depth / 2 * (rand() / float(RAND_MAX));
+                    vec3 acu = (original_img[j][i] +
+                                original_img[j + depth][i] +
+                                original_img[j][i + depth] +
+                                original_img[j + depth][i + depth] +
+                                original_img[j - depth][i] +
+                                original_img[j][i - depth] +
+                                original_img[j - depth][i - depth] +
+                                original_img[j + depth][i - depth] +
+                                original_img[j - depth][i + depth]) / vec3(9.0f, 9.0f, 9.0f);
+                    acu_ = acu_ + acu;
+                }
+
+
+                // depth = (((1.0f / depthBuffer[j][i]) - 2.5) * 4.0f);
+                // depth = depth - depth / 2 + depth / 2 * (rand() / float(RAND_MAX));
+                // vec3 second = (original_img[j][i] +
+                //                original_img[j + depth][i] +
+                //                original_img[j][i + depth] +
+                //                original_img[j + depth][i + depth] +
+                //                original_img[j - depth][i] +
+                //                original_img[j][i - depth] +
+                //                original_img[j - depth][i - depth] +
+                //                original_img[j + depth][i - depth] +
+                //                original_img[j - depth][i + depth]) / vec3(9.0f, 9.0f, 9.0f);
+
+                // depth = (((1.0f / depthBuffer[j][i]) - 2.5) * 4.0f);
+                // depth = depth - depth / 1 + depth / 1 * (rand() / float(RAND_MAX));
+                // vec3 third = (original_img[j][i] +
+                //               original_img[j + depth][i] +
+                //               original_img[j][i + depth] +
+                //               original_img[j + depth][i + depth] +
+                //               original_img[j - depth][i] +
+                //               original_img[j][i - depth] +
+                //               original_img[j - depth][i - depth] +
+                //               original_img[j + depth][i - depth] +
+                //               original_img[j - depth][i + depth]) / vec3(9.0f, 9.0f, 9.0f);
+
+                // depth = (((1.0f / depthBuffer[j][i]) - 2.5) * 4.0f);
+                // depth = depth - depth / 1 + depth / 1 * (rand() / float(RAND_MAX));
+                // vec3 fourth = (original_img[j][i] +
+                //                original_img[j + depth][i] +
+                //                original_img[j][i + depth] +
+                //                original_img[j + depth][i + depth] +
+                //                original_img[j - depth][i] +
+                //                original_img[j][i - depth] +
+                //                original_img[j - depth][i - depth] +
+                //                original_img[j + depth][i - depth] +
+                //                original_img[j - depth][i + depth]) / vec3(9.0f, 9.0f, 9.0f);
+
+                // anti_aliasing[width][height] = (anti_aliasing[width][height] + second + third + fourth) / 4.0f;
+                anti_aliasing[width][height] = acu_ / 4.0f;
+                PutPixelSDL(screen, width, height, anti_aliasing[width][height]);
+                width++;
+            }
+            else
+            {
+                anti_aliasing[width][height] = (original_img[j][i] + original_img[j + 1][i] + original_img[j][i + 1] + original_img[j + 1][i + 1]) / vec3(4.0f, 4.0f, 4.0f);
+                PutPixelSDL(screen, width, height, anti_aliasing[width][height]);
+                width++;
+            }
         }
         height++;
     }
