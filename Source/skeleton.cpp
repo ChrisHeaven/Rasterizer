@@ -12,8 +12,8 @@ using glm::vec2;
 
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
-const int SCREEN_WIDTH = 500;
-const int SCREEN_HEIGHT = 500;
+const int SCREEN_WIDTH = 600;
+const int SCREEN_HEIGHT = 600;
 SDL_Surface* screen;
 int t;
 float f = SCREEN_HEIGHT;
@@ -57,6 +57,7 @@ void DrawLineSDL(SDL_Surface* surface, Pixel a, Pixel b);
 void ComputePolygonRows(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, vec3 color);
 void DrawPolygonRows(vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, vec3 color);
 bool closest_intersection(vec3 start, vec3 dir, const vector<Triangle>& triangles, Intersection& cloestIntersection);
+void *triangles_thread(void *arg);
 
 int main(int argc, char* argv[])
 {
@@ -140,7 +141,7 @@ void Draw()
     if (SDL_MUSTLOCK(screen))
         SDL_LockSurface(screen);
     LoadTestModel(triangles);
-    vec3 currentColor;
+
     R = mat3(cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw));
     for (int y = 0; y < SCREEN_HEIGHT; y++)
     {
@@ -148,19 +149,73 @@ void Draw()
             depthBuffer[y][x] = 0;
     }
 
-    for (size_t i = 0; i < triangles.size(); i++)
+    pthread_t tid[4];
+    int thread_id[4];
+
+    for (int i = 0; i < 4; i++)
+    {
+        thread_id[i] = i;
+        pthread_create(&tid[i], NULL, triangles_thread, &thread_id[i]);
+    }
+
+    for (int i = 0; i < 4; i++)
+        pthread_join(tid[i], NULL);
+
+    // for (size_t i = 0; i < triangles.size(); i++)
+    // {
+    //     vector<vec3> vertices(3);
+    //     vertices[0] = triangles[i].v0;
+    //     vertices[1] = triangles[i].v1;
+    //     vertices[2] = triangles[i].v2;
+    //     currentColor = triangles[i].color;
+    //     for (int v = 0; v < 3; v++)
+    //         DrawPolygon(vertices , currentColor, i);
+    // }
+
+    if (SDL_MUSTLOCK(screen))
+        SDL_UnlockSurface(screen);
+    SDL_UpdateRect(screen, 0, 0, 0, 0);
+}
+
+void *triangles_thread(void *arg)
+{
+    int thread_id = *(int*)arg;
+    int start, end;
+    vec3 currentColor;
+
+    if (thread_id == 0)
+    {
+        start = 0;
+        end = 8;
+    }
+    if (thread_id == 1)
+    {
+        start = 8;
+        end = 16;
+    }
+    if (thread_id == 2)
+    {
+        start = 16;
+        end = 24;
+    }
+    if (thread_id == 3)
+    {
+        start = 24;
+        end = (int)triangles.size();
+    }
+
+    for (int i = start; i < end; i++)
     {
         vector<vec3> vertices(3);
         vertices[0] = triangles[i].v0;
         vertices[1] = triangles[i].v1;
         vertices[2] = triangles[i].v2;
         currentColor = triangles[i].color;
-        for (int v = 0; v < 3; ++v)
+        for (int v = 0; v < 3; v++)
             DrawPolygon(vertices , currentColor, i);
     }
-    if (SDL_MUSTLOCK(screen))
-        SDL_UnlockSurface(screen);
-    SDL_UpdateRect(screen, 0, 0, 0, 0);
+
+    return NULL;
 }
 
 void VertexShader(const vec3& v, Pixel& p, int triangle_index)
