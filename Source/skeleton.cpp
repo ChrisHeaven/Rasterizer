@@ -149,28 +149,17 @@ void Draw()
             depthBuffer[y][x] = 0;
     }
 
-    pthread_t tid[4];
-    int thread_id[4];
+    pthread_t tid[8];
+    int thread_id[8];
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 8; i++)
     {
         thread_id[i] = i;
         pthread_create(&tid[i], NULL, triangles_thread, &thread_id[i]);
     }
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 8; i++)
         pthread_join(tid[i], NULL);
-
-    // for (size_t i = 0; i < triangles.size(); i++)
-    // {
-    //     vector<vec3> vertices(3);
-    //     vertices[0] = triangles[i].v0;
-    //     vertices[1] = triangles[i].v1;
-    //     vertices[2] = triangles[i].v2;
-    //     currentColor = triangles[i].color;
-    //     for (int v = 0; v < 3; v++)
-    //         DrawPolygon(vertices , currentColor, i);
-    // }
 
     if (SDL_MUSTLOCK(screen))
         SDL_UnlockSurface(screen);
@@ -186,21 +175,41 @@ void *triangles_thread(void *arg)
     if (thread_id == 0)
     {
         start = 0;
-        end = 8;
+        end = 4;
     }
     if (thread_id == 1)
     {
-        start = 8;
-        end = 16;
+        start = 4;
+        end = 8;
     }
     if (thread_id == 2)
     {
-        start = 16;
-        end = 24;
+        start = 8;
+        end = 12;
     }
     if (thread_id == 3)
     {
+        start = 12;
+        end = 16;
+    }
+    if (thread_id == 4)
+    {
+        start = 16;
+        end = 20;
+    }
+    if (thread_id == 5)
+    {
+        start = 20;
+        end = 24;
+    }
+    if (thread_id == 6)
+    {
         start = 24;
+        end = 28;
+    }
+    if (thread_id == 7)
+    {
+        start = 28;
         end = (int)triangles.size();
     }
 
