@@ -12,24 +12,18 @@ using glm::vec2;
 
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
-const int SCREEN_WIDTH = 300;
-const int SCREEN_HEIGHT = 300;
+const int SCREEN_WIDTH = 200;
+const int SCREEN_HEIGHT = 200;
 SDL_Surface* screen;
 int t;
 float f = SCREEN_HEIGHT;
 std::vector<Triangle> triangles;
 
-vec3 camera_pos(0, 0, -3.5001);
+vec3 camera_pos(0, 0, -3.001);
 static const float cZ = camera_pos[2];
 
 float yaw = 0.0f * 3.1415926 / 180; // Yaw angle controlling camera rotation around y-axis
-// mat3 R;
-mat3 R = mat3(cos(yaw), 0, sin(yaw),
-              0, 1, 0,
-              -sin(yaw), 0, cos(yaw));
-vec3 Right( R[0][0], R[0][1], R[0][2] );
-vec3 down( R[1][0], R[1][1], R[1][2] );
-vec3 forward( R[2][0], R[2][1], R[2][2] );
+mat3 R;
 static vec3 anti_aliasing[SCREEN_WIDTH / 2][SCREEN_HEIGHT / 2];
 static vec3 original_img[SCREEN_WIDTH][SCREEN_HEIGHT];
 float depthBuffer[SCREEN_HEIGHT][SCREEN_WIDTH];
@@ -77,6 +71,7 @@ int main(int argc, char* argv[])
 
     while (NoQuitMessageSDL())
     {
+        cos(-2.0f);
         memset(anti_aliasing, 0, sizeof(anti_aliasing));
         memset(original_img, 0, sizeof(original_img));
 
@@ -112,30 +107,11 @@ void Update()
     {
         // Rotate the camera along the y axis
         yaw += 0.1f;
-
-        camera_pos = camera_pos - Right;
-        // float z = abs(sqrt(cZ * cZ - yaw * yaw));
-        // printf("yaw is %f, z is %f", yaw, z);
-        // camera_pos[0] = yaw;
-        // camera_pos[2] = z;
-        // R = mat3(cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw));
-        // light_pos = (light_pos_O - camera_pos) * R + camera_pos;
     }
     if (keystate[SDLK_RIGHT])
     {
         // Rotate the camera along the y axis
         yaw -= 0.1f;
-        // vec4 ii = (camera_pos[0],camera_pos[1],camera_pos[2],1);
-        // vec4 iii = ii * R;
-        // camera_pos[0] =  iii[0];
-        // camera_pos[1] =  iii[1];
-        // camera_pos[] =  iii[1];
-        camera_pos = camera_pos + Right;
-
-        // float z = abs(sqrt(cZ * cZ - yaw * yaw));
-        // printf("yaw is %f, z is %f\n", yaw, z);
-        // camera_pos[0] = yaw;
-        // camera_pos[2] = z;
     }
     if (keystate[SDLK_w])
     {
@@ -176,7 +152,8 @@ void Draw()
         SDL_LockSurface(screen);
     LoadTestModel(triangles);
 
-    // R = mat3(cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw));
+    R = mat3(cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw));
+    light_pos = (light_pos_O - camera_pos) * R + camera_pos;
     // for (int y = 0; y < SCREEN_HEIGHT; y++)
     // {
     //     for (int x = 0; x < SCREEN_WIDTH; x++)
@@ -277,10 +254,14 @@ void VertexShader(const vec3& v, Pixel& p, int triangle_index)
 {
     //vec3 nv = (v - camera_pos) * R + camera_pos;
     // camera_pos = (camera_pos - v) * R + v;
+    vec3 zz;
+    zz = (v - camera_pos) * R;
+    vec3 v_3d = zz + camera_pos;
 
-    float x_ = (v[0] - camera_pos[0]) / (v[2] - camera_pos[2]) * f + SCREEN_WIDTH / 2;
-    float y_ = (v[1] - camera_pos[1]) / (v[2] - camera_pos[2]) * f + SCREEN_HEIGHT / 2;
-    float z_ = 1 / (v[2] - camera_pos[2]);
+
+    float x_ = (zz[0]) / (zz[2]) * f + SCREEN_WIDTH / 2;
+    float y_ = (zz[1]) / (zz[2]) * f + SCREEN_HEIGHT / 2;
+    float z_ = 1 / (zz[2]);
     // printf("x %f\n", x_);
     // printf("y %f\n", y_);
 
@@ -308,6 +289,7 @@ void Interpolate(Pixel a, Pixel b, vector<Pixel>& result)
         result[i].pos3d[2] = 1 / result[i].zinv + camera_pos[2];
         result[i].pos3d[1] = (result[i].y - SCREEN_HEIGHT / 2) / f * (result[i].pos3d[2] - camera_pos[2]) + camera_pos[1];
         result[i].pos3d[0] = (result[i].x - SCREEN_WIDTH / 2) / f * (result[i].pos3d[2] - camera_pos[2]) + camera_pos[0];
+        // result[i].pos3d = result[i].pos3d * R;
         result[i].triangle_index = a.triangle_index;
         // result[i] = current;
         // current += step;
@@ -530,6 +512,12 @@ bool closest_intersection(vec3 start, vec3 dir, const vector<Triangle>& triangle
         v0 = triangles[i].v0;
         v1 = triangles[i].v1;
         v2 = triangles[i].v2;
+
+        v0 = (v0 - camera_pos) * R + camera_pos;
+        v1 = (v1 - camera_pos) * R + camera_pos;
+        v2 = (v2 - camera_pos) * R + camera_pos;
+
+
 
         e1 = v1 - v0;
         e2 = v2 - v0;
